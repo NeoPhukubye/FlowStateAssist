@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict
+from typing import List, Optional
 from pydantic import BaseModel, Field
 from enum import Enum
 
@@ -22,9 +22,10 @@ class MicroAction(BaseModel):
     command: Optional[str] = None
     status: TaskStatus = TaskStatus.PENDING
     dependencies: List[str] = Field(default_factory=list)
+    file_operations: List[str] = Field(default_factory=list)
 
 class TaskDAG(BaseModel):
     id: str
     goal: str
-    nodes: Dict[str, MicroAction]
+    nodes: dict[str, MicroAction]
     entry_nodes: List[str]

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowState Assist</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0f172a; color: #e2e8f0; margin: 0; padding: 2rem;
+            max-width: 800px; margin-left: auto; margin-right: auto;
+        }
+        h1 { color: #38bdf8; margin-bottom: 0.5rem; }
+        .subtitle { color: #94a3b8; margin-bottom: 2rem; }
+        textarea {
+            width: 100%; min-height: 120px; background: #1e293b; color: #f8fafc;
+            border: 1px solid #334155; border-radius: 0.5rem; padding: 1rem;
+            font-family: inherit; font-size: 1rem;
+        }
+        button {
+            background: #0ea5e9; color: white; border: none; padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem; font-size: 1rem; cursor: pointer; margin-top: 1rem;
+        }
+        button:hover { background: #0284c7; }
+        button.secondary { background: #475569; }
+        button.secondary:hover { background: #64748b; }
+        .step-card {
+            background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem;
+            padding: 1.5rem; margin-top: 2rem;
+        }
+        .step-title { font-size: 1.25rem; font-weight: 600; color: #38bdf8; }
+        .step-meta { color: #94a3b8; font-size: 0.875rem; margin-top: 0.25rem; }
+        .commands {
+            background: #0f172a; border-radius: 0.5rem; padding: 1rem;
+            margin-top: 1rem; font-family: ui-monospace, monospace; font-size: 0.875rem;
+        }
+        .commands code { color: #a5f3fc; }
+        .mode-bar {
+            display: flex; gap: 1rem; margin-top: 1.5rem; align-items: center;
+        }
+        .timer { font-size: 1.5rem; font-weight: 700; color: #fbbf24; margin-top: 1rem; }
+        .hidden { display: none; }
+        .error { color: #f87171; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>FlowState Assist</h1>
+    <p class="subtitle">Paste your ticket, PR diff, or architecture spec. We'll break it into 5-minute micro-actions.</p>
+
+    <textarea id="taskInput" placeholder="e.g., Review PR #42 for authentication changes..."></textarea>
+    <br>
+    <button onclick="decompose()">Decompose Task</button>
+
+    <div id="sessionArea" class="hidden">
+        <div class="mode-bar">
+            <span>Mode:</span>
+            <button id="modeBtn" class="secondary" onclick="toggleMode()">Switch to Overwhelmed</button>
+            <span id="modeLabel" style="color:#94a3b8">In Focus</span>
+        </div>
+
+        <div id="stepArea" class="step-card hidden">
+            <div class="step-title" id="stepTitle"></div>
+            <div class="step-meta" id="stepMeta"></div>
+            <div class="commands" id="stepCommands"></div>
+            <div class="timer" id="timerDisplay">00:00</div>
+            <div style="margin-top:1rem; display:flex; gap:1rem;">
+                <button onclick="startTimer()">Start Timer</button>
+                <button onclick="pauseTimer()" class="secondary">Pause</button>
+                <button onclick="completeStep()">Complete Step</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="errorArea" class="error"></div>
+
+    <script>
+        let sessionId = null;
+        let currentStepId = null;
+        let timerInterval = null;
+        let mode = 'in_focus';
+
+        async function decompose() {
+            const desc = document.getElementById('taskInput').value.trim();
+            if (!desc) return showError('Please enter a task description.');
+            const res = await fetch('/api/v1/decompose', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'description=' + encodeURIComponent(desc) + '&pacing_mode=' + mode
+            });
+            if (!res.ok) { const e = await res.json(); return showError(e.detail || 'Error'); }
+            const dag = await res.json();
+            sessionId = 'sess-' + Date.now();
+            await loadNext();
+            document.getElementById('sessionArea').classList.remove('hidden');
+            showError('');
+        }
+
+        async function loadNext() {
+            const res = await fetch('/api/v1/session/' + sessionId + '/next');
+            const data = await res.json();
+            currentStepId = data.current_step_id?.id || null;
+            const area = document.getElementById('stepArea');
+            if (!currentStepId) {
+                area.classList.add('hidden');
+                return;
+            }
+            area.classList.remove('hidden');
+            document.getElementById('stepTitle').textContent = data.current_step_id.title;
+            document.getElementById('stepMeta').textContent =
+                `${data.current_step_id.estimated_minutes} min · ${data.current_step_id.cognitive_load} cognitive load`;
+            const cmdRes = await fetch('/api/v1/session/' + sessionId + '/step/' + currentStepId + '/commands');
+            const cmdData = await cmdRes.json();
+            const cmds = cmdData.commands.map(c => `<div><code>${escapeHtml(c.command)}</code> — ${escapeHtml(c.explanation)}</div>`).join('');
+            document.getElementById('stepCommands').innerHTML = cmds || '<div>No automated commands available.</div>';
+            updateTimerDisplay(data.timer);
+        }
+
+        async function completeStep() {
+            if (!currentStepId) return;
+            const res = await fetch('/api/v1/session/' + sessionId + '/step/' + currentStepId + '/complete', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'completed') {
+                alert(data.message);
+                document.getElementById('stepArea').classList.add('hidden');
+                return;
+            }
+            currentStepId = data.next_step?.id || null;
+            if (currentStepId) await loadNext();
+        }
+
+        async function startTimer() {
+            await fetch('/api/v1/session/' + sessionId + '/timer/start', { method: 'POST' });
+            pollTimer();
+        }
+        async function pauseTimer() {
+            await fetch('/api/v1/session/' + sessionId + '/timer/pause', { method: 'POST' });
+            clearInterval(timerInterval);
+        }
+        async function pollTimer() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(async () => {
+                const res = await fetch('/api/v1/session/' + sessionId + '/timer');
+                const data = await res.json();
+                updateTimerDisplay(data.timer);
+            }, 1000);
+        }
+        function updateTimerDisplay(timer) {
+            if (!timer || timer.status === 'idle' || timer.status === 'stopped') {
+                document.getElementById('timerDisplay').textContent = '00:00';
+                return;
+            }
+            let elapsed = timer.elapsed_before_pause || 0;
+            if (timer.status === 'running' && timer.started_at) {
+                elapsed += (Date.now() / 1000) - timer.started_at;
+            }
+            const mins = Math.floor(elapsed / 60);
+            const secs = Math.floor(elapsed % 60);
+            document.getElementById('timerDisplay').textContent =
+                String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
+        }
+        async function toggleMode() {
+            mode = mode === 'in_focus' ? 'overwhelmed' : 'in_focus';
+            document.getElementById('modeLabel').textContent = mode === 'in_focus' ? 'In Focus' : 'Overwhelmed';
+            document.getElementById('modeBtn').textContent = mode === 'in_focus' ? 'Switch to Overwhelmed' : 'Switch to In Focus';
+            const res = await fetch('/api/v1/session/' + sessionId + '/mode', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ session_id: sessionId, mode: mode })
+            });
+            if (res.ok) await loadNext();
+        }
+        function showError(msg) { document.getElementById('errorArea').textContent = msg; }
+        function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    </script>
+</body>
+</html>
