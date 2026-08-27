@@ -1,19 +1,20 @@
-# FlowState Assist
+# FlowState Assist — Executive Dysfunction Decomposer & Micro-Step Pacer
 
-A developer copilot that mitigates executive dysfunction by decomposing complex tasks into 5-minute micro-actions using IBM Granite AI and DAG-based task orchestration.
+An interactive developer copilot designed for knowledge workers dealing with ADHD, traumatic brain injury (TBI), or chronic fatigue. It ingests massive issue tickets, PR diffs, or architecture specs and programmatically splits them into 5-minute executable micro-actions with dynamic cognitive-load estimates.
 
 ## Features
 
 - **AI Task Decomposition** - Breaks down tickets, PR diffs, and architecture specs into actionable micro-actions via IBM Granite
-- **Pacing Modes** - Adjusts task complexity dynamically: *In Focus* (up to 10 min, mixed load) or *Overwhelmed* (max 5 min, low cognitive load only)
+- **Dynamic Pacing Modes** - Adjusts task complexity based on user state: *In Focus* (up to 10 min, mixed load) or *Overwhelmed* (max 5 min, low cognitive load only)
 - **DAG Orchestration** - Manages task dependencies, topological ordering, and cycle detection
-- **Built-in Timer** - Tracks time spent on each step with start/pause/stop controls
-- **Command Suggestions** - Auto-generates shell commands and file operations for each step
+- **Built-in Timer** - Tracks time spent on each step with start/pause/stop controls to combat time blindness
+- **Command Suggestions** - Auto-generates shell commands and files needed for the immediate step so the user never has to context-switch across tools
 
 ## Tech Stack
 
 - **Backend:** FastAPI (Python 3.10+)
-- **AI:** IBM Granite 3 8B Instruct
+- **AI Core:** IBM Granite 3 8B Instruct
+- **Frontend:** Vanilla JS SPA served via FastAPI static files
 - **State:** Pydantic models with in-memory session storage
 
 ## Project Structure
@@ -27,12 +28,24 @@ FlowStateAssist/
       routes/               # API routers (tasks, sessions)
       core/                 # Business logic (DAG, AI, pacing)
     static/
-      index.html            # Single-page frontend
+      index.html            # Single-page frontend (task input, timer, step viewer)
     tests/                  # pytest suite
     requirements.txt
   scripts/
     run_server.sh           # Dev server launcher
 ```
+
+## Frontend
+
+The frontend is a single-page application (`backend/static/index.html`) served directly by FastAPI. It provides:
+
+- **Task Input** - Textarea for pasting tickets, PR diffs, or architecture specs
+- **Pacing Toggle** - Switch between *In Focus* and *Overwhelmed* modes
+- **Step Viewer** - Displays the current micro-action with title, time estimate, cognitive load, and generated commands
+- **Timer Controls** - Start, pause, and stop a session timer
+- **Completion Flow** - Mark steps done and automatically load the next available action
+
+No separate build step or frontend framework is required.
 
 ## Getting Started
 
