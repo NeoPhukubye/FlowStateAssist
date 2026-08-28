@@ -5,13 +5,11 @@ from app.models.session import (
     FeedbackRequest, CompleteStepRequest
 )
 from app.core.logic import DAGManager, PacingEngine, CommandGenerator
+from app.state import active_sessions, session_dags
 from datetime import datetime
 import time
 
 router = APIRouter(tags=["sessions"])
-
-active_sessions: dict[str, SessionState] = {}
-session_dags: dict[str, TaskDAG] = {}
 
 
 def _get_or_404(session_id: str) -> tuple[SessionState, TaskDAG]:
