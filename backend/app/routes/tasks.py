@@ -30,4 +30,4 @@ async def decompose_task(description: str, pacing_mode: PacingMode = PacingMode.
     )
     active_sessions[session_id] = session
     session_dags[session_id] = dag
-    return dag
+    return {"session_id": session_id, "dag": dag}
