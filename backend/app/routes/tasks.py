@@ -3,13 +3,12 @@ from app.models.task import TaskDAG, MicroAction
 from app.models.session import SessionState, PacingMode
 from app.core.ai import GraniteService
 from app.core.logic import DAGManager
+from app.state import active_sessions, session_dags
 from typing import List
 import time
+import uuid
 
 router = APIRouter(tags=["tasks"])
-
-active_sessions: dict[str, SessionState] = {}
-session_dags: dict[str, TaskDAG] = {}
 
 
 @router.post("/decompose", response_model=TaskDAG)
@@ -21,7 +20,7 @@ async def decompose_task(description: str, pacing_mode: PacingMode = PacingMode.
         manager.topological_order()
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    session_id = f"sess-{int(time.time())}"
+    session_id = f"sess-{uuid.uuid4().hex[:12]}"
     session = SessionState(
         id=session_id,
         dag_id=dag.id,
